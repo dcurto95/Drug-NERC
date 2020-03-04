@@ -58,4 +58,5 @@ if __name__ == '__main__':
         wrong_entities_dict[type[:-1]].append(ent)
 
     print("MISSING:\n", json.dumps(missing_dict, indent=4))
+    print("\n\n")
     print("WRONG:\n", json.dumps(wrong_entities_dict, indent=4))

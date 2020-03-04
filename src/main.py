@@ -5,9 +5,9 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 
 import nltk
-import numpy as np
-from nltk import word_tokenize, TrigramCollocationFinder, QuadgramCollocationFinder
-from nltk.collocations import AbstractCollocationFinder
+from chemdataextractor.nlp.tokenize import ChemWordTokenizer
+from nltk import word_tokenize, QuadgramCollocationFinder
+from nltk.corpus import stopwords
 
 
 def parse_xml(file):
@@ -17,6 +17,16 @@ def parse_xml(file):
 
 def get_sentence_info(child):
     return child.get('id'), child.get('text')
+
+
+def chem_tokenize(text):
+    cwt = ChemWordTokenizer()
+    tokens = cwt.tokenize(text)
+    token_indexs = cwt.span_tokenize(text)
+    tokenized_info = []
+    for token_index, token in zip(token_indexs, tokens):
+        tokenized_info.append((token, token_index[0], token_index[1] - 1))
+    return tokenized_info
 
 
 def tokenize(text):
@@ -39,12 +49,75 @@ def evaluate(inputdir, outputfile):
     return os.system("java -jar ../eval/evaluateNER.jar " + inputdir + " ../output/" + outputfile)
 
 
-def extract_entities(token_list):
+def get_external_resources():
+    file = open('../resources/DrugBank.txt', 'r', encoding="utf8")
+    Lines = file.readlines()
+
+    resources = {}
+
+    # Strips the newline character
+    for line in Lines:
+        value = line.split("|")
+        resources[value[0]] = value[1][:-1]
+    return resources
+
+
+def extract_entities(token_list, entities_dict):
     entities = []
     previous_token_offset = (0, 0)
+    stop_words = set(stopwords.words('english'))
 
     # TODO: Revisar treure tokens majuscules d'una lletra 'A'
     for token in token_list:
+        if token[0] in entities_dict:
+            entities.append({'name': token[0],
+                             'offset': str(token[1]) + "-" + str(token[2]),
+                             'type': entities_dict[token[0]]})
+        # if len(entities) > 0 and previous_token_offset[1] + 2 == token[1] and token[0].isupper() and len(token[0]) == 1:
+        #     entities[len(entities) - 1]['name'] += " " + token[0]
+        #     entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+        #     entities[len(entities) - 1]['type'] = "drug_n"
+        #     continue
+
+        if token[0].lower() in stop_words:
+            continue
+        if token[0].lower() == "aspirin":
+            entities.append({'name': token[0],
+                             'offset': str(token[1]) + "-" + str(token[2]),
+                             'type': "brand"})
+            continue
+        if '(' in token[0] and len(token[0]) > 1:
+            if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
+                entities[len(entities) - 1]['name'] += " " + token[0]
+                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+            else:
+                entities.append({'name': token[0],
+                                 'offset': str(token[1]) + "-" + str(token[2]),
+                                 'type': "drug_n"})
+            continue
+        if re.search("[a-z][\-][a-z]", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
+                                                               token[0]) is None:
+            if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
+                entities[len(entities) - 1]['name'] += " " + token[0]
+                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+            else:
+                entities.append({'name': token[0],
+                                 'offset': str(token[1]) + "-" + str(token[2]),
+                                 'type': "group"})
+            previous_token_offset = (token[1], token[2])
+            continue
+
+        if re.search("\w[_%()\-]\w", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
+                                                             token[0]) is None:
+            if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
+                entities[len(entities) - 1]['name'] += " " + token[0]
+                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+            else:
+                entities.append({'name': token[0],
+                                 'offset': str(token[1]) + "-" + str(token[2]),
+                                 'type': "drug_n"})
+            previous_token_offset = (token[1], token[2])
+            continue
         if token[0].isupper():
             pattern = re.compile("[AEIOU]")
             # TODO Check if es la segona paraula en majuscules potser hem de canviar el type també
@@ -63,7 +136,8 @@ def extract_entities(token_list):
             continue
 
         if len(entities) > 0 and previous_token_offset[1] + 2 == token[1] and any(
-                substring in token[0].lower() for substring in ['agent', 'inhibitor', 'blocker', 'drug', 'type', 'medication', 'contraceptive', 'anticoagulants']):
+                substring in token[0].lower() for substring in
+                ['agent', 'inhibitor', 'blocker', 'drug', 'type', 'medication', 'contraceptive', 'anticoagulants']):
             entities[len(entities) - 1]['name'] += " " + token[0]
             entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             entities[len(entities) - 1]['type'] = "group"
@@ -108,33 +182,8 @@ def extract_entities(token_list):
         #     previous_token_offset = (token[1], token[2])
         #     continue
 
-        if re.search("[a-z][\-][a-z]", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
-                                                               token[0]) is None:
-            if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
-            else:
-                entities.append({'name': token[0],
-                                 'offset': str(token[1]) + "-" + str(token[2]),
-                                 'type': "group"})
-            previous_token_offset = (token[1], token[2])
-            continue
-
-        if re.search("\w[_%()\-]\w", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
-                                                             token[0]) is None:
-            if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
-            else:
-                entities.append({'name': token[0],
-                                 'offset': str(token[1]) + "-" + str(token[2]),
-                                 'type': "drug_n"})
-            previous_token_offset = (token[1], token[2])
-            continue
-
-        # suffixes = ("azole", "idine", "amine", "mycin")
         suffixes = (
-            "afil", "asone", "bicin", "bital", "caine", "cillin", "cycline", "dazole", "dipine",
+            "afil", "asone", "bicin", "bital", "caine", "cillin", "cycline", "azole", "dipine",
             "dronate", "eprazole", "fenac", "floxacin", "gliptin", "glitazone", "iramine", "lamide", "mab",
             "mustine", "mycin", "nacin", "nazole", "olol", "olone", "olone", "onide", "oprazole", "parin",
             "phylline", "pramine", "pril", "profen", "ridone", "sartan", "semide", "setron", "setron", "statin",
@@ -163,7 +212,7 @@ def extract_entities(token_list):
             previous_token_offset = (token[1], token[2])
             continue
 
-        if token[0][0].isupper():
+        if token[0][0].isupper() and nltk.pos_tag([token[0]])[0][1][0] == 'N':
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
                 entities[len(entities) - 1]['name'] += " " + token[0]
                 entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
@@ -303,7 +352,9 @@ def print_truth_patterns(input_directory):
 
 if __name__ == '__main__':
     output_file_name = "task9.1_out_1.txt"
-    input_directory = '../data/Train/'
+    input_directory = '../data/Devel/'
+
+    entities_dict = get_external_resources()
 
     output_file = open('../output/' + output_file_name, 'w+')
     # print_truth_patterns(input_directory)
@@ -312,10 +363,8 @@ if __name__ == '__main__':
         print(" - File:", filename)
         for child in root:
             sid, text = get_sentence_info(child)
-            token_list = tokenize(text)
-            entities = extract_entities(token_list)
-            if entities:
-                print(entities)
+            token_list = chem_tokenize(text)
+            entities = extract_entities(token_list, entities_dict)
             output_entities(sid, entities, output_file)
     # Close the file
     output_file.close()

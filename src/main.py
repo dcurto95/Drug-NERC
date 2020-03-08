@@ -62,24 +62,31 @@ def get_external_resources():
     return resources
 
 
-def extract_entities(token_list, entities_dict):
+def extract_entities(token_list, entities_dict, with_resources=False):
     entities = []
     previous_token_offset = (0, 0)
     stop_words = set(stopwords.words('english'))
 
     # TODO: Revisar treure tokens majuscules d'una lletra 'A'
     for token in token_list:
-        if token[0] in entities_dict:
-            entities.append({'name': token[0],
-                             'offset': str(token[1]) + "-" + str(token[2]),
-                             'type': entities_dict[token[0]]})
-        # if len(entities) > 0 and previous_token_offset[1] + 2 == token[1] and token[0].isupper() and len(token[0]) == 1:
-        #     entities[len(entities) - 1]['name'] += " " + token[0]
-        #     entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
-        #     entities[len(entities) - 1]['type'] = "drug_n"
-        #     continue
+        if with_resources:
+            if token[0].lower() in entities_dict:
+                entities.append({'name': token[0],
+                                 'offset': str(token[1]) + "-" + str(token[2]),
+                                 'type': entities_dict[token[0].lower()]})
+                continue
+            if token[0] in entities_dict:
+                entities.append({'name': token[0],
+                                 'offset': str(token[1]) + "-" + str(token[2]),
+                                 'type': entities_dict[token[0]]})
+            if token[0].lower() in stop_words:
+                continue
 
-        if token[0].lower() in stop_words:
+        if token[0].lower() in {'of', 'the', 'and', 'in', 'with', 'to', 'be', 'or', 'is', 'not', 'by', 'for',
+                                'should', 'on', 'that', 'been', 'have', 'other', 'was', 'when', 'are', 'as', 'were',
+                                'no', 'has', 'these', 'an', 'this', 'such', 'at', 'from', 'it', 'if', 'there', 'after',
+                                'which', 'can', 'between', 'during', 'because', 'both', 'than', 'did', 'its', 'but',
+                                'some', 'who', 'any'}:
             continue
         if token[0].lower() == "aspirin":
             entities.append({'name': token[0],
@@ -364,8 +371,9 @@ if __name__ == '__main__':
         for child in root:
             sid, text = get_sentence_info(child)
             token_list = chem_tokenize(text)
-            entities = extract_entities(token_list, entities_dict)
+            entities = extract_entities(token_list, entities_dict, with_resources=True)
             output_entities(sid, entities, output_file)
+
     # Close the file
     output_file.close()
     print(evaluate(input_directory, output_file_name))

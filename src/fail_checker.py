@@ -15,7 +15,7 @@ if __name__ == '__main__':
         truth[value[0]].append((value[-2], value[-1]))
 
     # Using readlines()
-    file1 = open('../output/task9.1_out_1.txt', 'r')
+    file1 = open('../output/task9.1_out_2.txt', 'r')
     Lines = file1.readlines()
 
     output = {}

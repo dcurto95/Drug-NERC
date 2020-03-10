@@ -74,11 +74,13 @@ def extract_entities(token_list, entities_dict, with_resources=False):
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': entities_dict[token[0].lower()]})
+                previous_token_offset = (token[1], token[2])
                 continue
             if token[0] in entities_dict:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': entities_dict[token[0]]})
+                previous_token_offset = (token[1], token[2])
             if token[0].lower() in stop_words:
                 continue
 
@@ -92,62 +94,65 @@ def extract_entities(token_list, entities_dict, with_resources=False):
             entities.append({'name': token[0],
                              'offset': str(token[1]) + "-" + str(token[2]),
                              'type': "brand"})
+            previous_token_offset = (token[1], token[2])
             continue
         if '(' in token[0] and len(token[0]) > 1:
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "drug_n"})
+                previous_token_offset = (token[1], token[2])
             continue
         if re.search("[a-z][\-][a-z]", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
                                                                token[0]) is None:
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "group"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         if re.search("\w[_%()\-]\w", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$",
                                                              token[0]) is None:
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "drug_n"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
         if token[0].isupper():
             pattern = re.compile("[AEIOU]")
             # TODO Check if es la segona paraula en majuscules potser hem de canviar el type també
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             elif not bool(pattern.search(token[0])):
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "drug_n"})
+                previous_token_offset = (token[1], token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "brand"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         if len(entities) > 0 and previous_token_offset[1] + 2 == token[1] and any(
                 substring in token[0].lower() for substring in
                 ['agent', 'inhibitor', 'blocker', 'drug', 'type', 'medication', 'contraceptive', 'anticoagulants']):
-            entities[len(entities) - 1]['name'] += " " + token[0]
-            entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
-            entities[len(entities) - 1]['type'] = "group"
+            entities[-1]['name'] += " " + token[0]
+            entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+            entities[-1]['type'] = "group"
             continue
 
         if token[0].lower() in ['digoxin', 'warfarin', 'phenytoin', 'theophylline', 'lithium', 'ketoconazole',
@@ -157,36 +162,36 @@ def extract_entities(token_list, entities_dict, with_resources=False):
                                 'propranolol', 'methotrexate', 'diltiazem', 'cisapride',
                                 'ethanol']:
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "drug"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         if any(substring in token[0].lower() for substring in
                ['anticoagulant', 'corticosteroid', 'NSAID', 'antacid', 'contraceptive', 'diuretic', 'barbiturate']):
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "group"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         # if re.search("(([A-Z]+)|(\d+))\-(([A-Z]+)|(\d+))", token[0]) and re.search("^(\d+[\-\.]\d+)$|^(\d+\.\d+\-\d+\.\d+)$", token[0]) is None:
         #     if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-        #         entities[len(entities) - 1]['name'] += " " + token[0]
-        #         entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+        #         entities[-1]['name'] += " " + token[0]
+        #         entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
         #     else:
         #         entities.append({'name': token[0],
         #                          'offset': str(token[1]) + "-" + str(token[2]),
         #                          'type': "drug_n"})
-        #     previous_token_offset = (token[1], token[2])
+        #         previous_token_offset = (token[1], token[2])
         #     continue
 
         suffixes = (
@@ -198,36 +203,36 @@ def extract_entities(token_list, entities_dict, with_resources=False):
             "zepam", "zodone", "zolam", "zosin", "ine")
         if token[0].endswith(suffixes):
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "drug"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         prefixes = ("anti")
         if token[0].startswith(prefixes) or "POC" in token[0]:
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "group"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
 
         if token[0][0].isupper() and nltk.pos_tag([token[0]])[0][1][0] == 'N':
             if len(entities) > 0 and previous_token_offset[1] + 2 == token[1]:
-                entities[len(entities) - 1]['name'] += " " + token[0]
-                entities[len(entities) - 1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+                entities[-1]['name'] += " " + token[0]
+                entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
             else:
                 entities.append({'name': token[0],
                                  'offset': str(token[1]) + "-" + str(token[2]),
                                  'type': "brand"})
-            previous_token_offset = (token[1], token[2])
+                previous_token_offset = (token[1], token[2])
             continue
     return entities
 
@@ -371,7 +376,7 @@ if __name__ == '__main__':
         for child in root:
             sid, text = get_sentence_info(child)
             token_list = chem_tokenize(text)
-            entities = extract_entities(token_list, entities_dict, with_resources=True)
+            entities = extract_entities(token_list, entities_dict, with_resources=False)
             output_entities(sid, entities, output_file)
 
     # Close the file

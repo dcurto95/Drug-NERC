@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 
 import nltk
+import pycrfsuite
 from chemdataextractor.nlp.tokenize import ChemWordTokenizer
 from nltk import word_tokenize, QuadgramCollocationFinder
 from nltk.corpus import stopwords
@@ -59,6 +60,14 @@ def get_external_resources():
     for line in Lines:
         value = line.split("|")
         resources[value[0]] = value[1][:-1]
+
+    file = open('../resources/HSDB.txt', 'r', encoding="utf8")
+    Lines = file.readlines()
+
+    # Strips the newline character
+    for line in Lines:
+        value = line
+        resources[value] = ""
     return resources
 
 
@@ -125,6 +134,26 @@ def extract_features(token_list, entities_dict, with_resources=False):
         else:
             features.append("pref4=" + token[0])
 
+        if len(token[0]) >= 3:
+            features.append("suff3=" + token[0][-3:])
+        else:
+            features.append("suff3=" + token[0])
+
+        if len(token[0]) >= 3:
+            features.append("pref3=" + token[0][:3])
+        else:
+            features.append("pref3=" + token[0])
+
+        if len(token[0]) >= 2:
+            features.append("suff2=" + token[0][-2:])
+        else:
+            features.append("suff2=" + token[0])
+
+        if len(token[0]) >= 2:
+            features.append("pref2=" + token[0][:2])
+        else:
+            features.append("pref2=" + token[0])
+
         features.append("has_poc=" + str("POC" in token[0]))
 
         features.append("starts_with_uppercase=" + str(token[0][0].isupper()))
@@ -151,18 +180,28 @@ def extract_features(token_list, entities_dict, with_resources=False):
             features.append("next_postag=")
             features.append("next_len=0")
 
+        features.append("capitals_inside=" + str(token[0][1:].lower() != token[0][1:]))
+
+        features.append("count_punct=" + str(len(re.findall("[\.\-+\,()]", token[0]))))
+
+        features.append("has_roman=" + str(bool(re.search("[IVXDLCM]+", token[0]))))
+
         entities.append(features)
 
     return entities
 
 
-def output_entities(sid, tokens, gold_entities, features, output_file):
+def output_features(sid, tokens, gold_entities, features, output_file):
     for token, feature_vector, bio in zip(tokens, features, gold_entities):
-        print(sid + "\t" + token[0] + "\t" + str(token[1]) + "\t" + str(token[2]) + "\t" + bio + "\t" + "\t".join(
-            feature_vector))
-    print("")
-    # for entity in entities:
-    #     output_file.write(sid + "|" + entity['offset'] + "|" + entity['name'] + "|" + entity['type'] + "\n")
+        output_file.write(
+            sid + "\t" + token[0] + "\t" + str(token[1]) + "\t" + str(token[2]) + "\t" + bio + "\t" + "\t".join(
+                feature_vector) + "\n")
+    output_file.write("\n")
+
+
+def output_entities(sid, entities, output_file):
+    for entity in entities:
+        output_file.write(sid + "|" + entity['offset'] + "|" + entity['name'] + "|" + entity['type'] + "\n")
 
 
 def get_postag_counts(token_list, entities, previous_tag_dict, entity_tag_dict):
@@ -198,7 +237,7 @@ def get_postag_counts(token_list, entities, previous_tag_dict, entity_tag_dict):
 
 def get_truth_entities(child):
     return list(zip([ent.get('text') for ent in child.findall('entity')],
-               [ent.get('charOffset') for ent in child.findall('entity')])), \
+                    [ent.get('charOffset') for ent in child.findall('entity')])), \
            [ent.get('type') for ent in child.findall('entity')]
 
 
@@ -291,54 +330,168 @@ def get_gold_entities(token_list, truth_entities):
     gold_entities = []
     entity_counter = 0
 
-    for token in token_list:
+    for j, token in enumerate(token_list):
         if not truth_entities or len(truth_entities[0]) <= entity_counter:
             gold_entities.append("O")
             continue
-
-        entity_offset = truth_entities[0][entity_counter][1].split('-')
-        entity_offset[0] = int(entity_offset[0])
-        entity_offset[1] = int(entity_offset[1])
-
-        if entity_offset[0] == token[1] and entity_offset[1] == token[2]:
-            # Exact match
-            gold_entities.append("B-" + truth_entities[1][entity_counter])
-            entity_counter += 1
-        elif entity_offset[0] == token[1]:
-            # Beginning match
-            gold_entities.append("B-" + truth_entities[1][entity_counter])
-        elif entity_offset[0] < token[1] and entity_offset[1] > token[2]:
-            # Inside match
-            gold_entities.append("I-" + truth_entities[1][entity_counter])
-        elif entity_offset[1] == token[2]:
-            # End match
-            gold_entities.append("I-" + truth_entities[1][entity_counter])
-            entity_counter += 1
+        if ';' in truth_entities[0][entity_counter][1]:
+            entity_offsets = truth_entities[0][entity_counter][1].split(';')
+            for i, offset in enumerate(entity_offsets):
+                entity_offset = offset.split('-')
+                entity_offset[0] = int(entity_offset[0])
+                entity_offset[1] = int(entity_offset[1])
+                entity_offsets[i] = (entity_offset[0], entity_offset[1])
         else:
+            entity_offset = truth_entities[0][entity_counter][1].split('-')
+            entity_offset[0] = int(entity_offset[0])
+            entity_offset[1] = int(entity_offset[1])
+            entity_offsets = [(entity_offset[0], entity_offset[1])]
+
+        for offset in entity_offsets:
+            if offset[0] == token[1] and offset[1] == token[2]:
+                # Exact match
+                gold_entities.append("B-" + truth_entities[1][entity_counter])
+                entity_counter += 1
+                break
+            elif offset[0] == token[1]:
+                # Beginning match
+                gold_entities.append("B-" + truth_entities[1][entity_counter])
+                break
+            elif offset[0] < token[1] and offset[1] > token[2]:
+                # Inside match
+                gold_entities.append("I-" + truth_entities[1][entity_counter])
+                break
+            elif offset[1] == token[2]:
+                # End match
+                gold_entities.append("I-" + truth_entities[1][entity_counter])
+                entity_counter += 1
+                break
+        if len(gold_entities) == j:
             gold_entities.append('O')
 
     return gold_entities
 
 
+def read_features(filename):
+    # Using readlines()
+    file1 = open('../output/' + filename, 'r')
+    lines = file1.readlines()
+
+    sentences_features = []
+    sentences_bios = []
+
+    token_features = []
+    bios = []
+
+    # Strips the newline character
+    for line in lines:
+        if line == "\n":
+            # End of sentence
+            sentences_features.append(token_features)
+            sentences_bios.append(bios)
+
+            token_features = []
+            bios = []
+            continue
+        values = line.split("\t")
+
+        sid = values[0]
+        token_name = values[1]
+        start_offset = values[2]
+        end_offset = values[3]
+        bio = values[4]
+        feature_vector = values[5:]
+        feature_vector[-1].replace('\n', '')
+
+        bios.append(bio)
+        token_features.append(feature_vector)
+
+    return sentences_features, sentences_bios
+
+
+def extract_entities_from_bio(token_list, bio_tags):
+    entities = []
+    previous_token_offset = (0, 0)
+
+    for token, bio in zip(token_list, bio_tags):
+        if bio.startswith('B'):
+            entities.append({'name': token[0],
+                             'offset': str(token[1]) + "-" + str(token[2]),
+                             'type': bio.split("-")[-1]})
+            previous_token_offset = (token[1], token[2])
+        elif bio.startswith('I') and entities:
+            entities[-1]['name'] += " " + token[0]
+            entities[-1]['offset'] = str(previous_token_offset[0]) + "-" + str(token[2])
+    return entities
+
+
 if __name__ == '__main__':
-    output_file_name = "task9.1_out_1.txt"
-    input_directory = '../data/Train/'
+    task = "test"
+    with_resources = True
 
-    entities_dict = get_external_resources()
+    if task == "get_features":
+        output_file_name = "train.txt"
+        input_directory = '../data/Train/'
 
-    output_file = open('../output/' + output_file_name, 'w+')
-    # print_truth_patterns(input_directory)
-    for filename in os.listdir(input_directory):
-        root = parse_xml(input_directory + filename)
-        print(" - File:", filename)
-        for child in root:
-            sid, text = get_sentence_info(child)
-            token_list = chem_tokenize(text)
-            features = extract_features(token_list, entities_dict)
-            truth_entities = get_truth_entities(child)
-            gold_entities = get_gold_entities(token_list, truth_entities)
-            output_entities(sid, token_list, gold_entities, features, output_file)
+        entities_dict = get_external_resources()
 
-    # Close the file
-    output_file.close()
-    print(evaluate(input_directory, output_file_name))
+        output_file = open('../output/' + output_file_name, 'w+')
+        # print_truth_patterns(input_directory)
+        for filename in os.listdir(input_directory):
+            root = parse_xml(input_directory + filename)
+            print(" - File:", filename)
+            for child in root:
+                sid, text = get_sentence_info(child)
+                token_list = chem_tokenize(text)
+                features = extract_features(token_list, entities_dict, with_resources=with_resources)
+                truth_entities = get_truth_entities(child)
+                gold_entities = get_gold_entities(token_list, truth_entities)
+                output_features(sid, token_list, gold_entities, features, output_file)
+
+        # Close the file
+        output_file.close()
+    elif task == "train_crf":
+        sentences_features, sentences_bios = read_features("train.txt")
+
+        trainer = pycrfsuite.Trainer(verbose=False)
+
+        for xseq, yseq in zip(sentences_features, sentences_bios):
+            trainer.append(xseq, yseq)
+
+        trainer.set_params({
+            'c1': 1.0,  # coefficient for L1 penalty
+            'c2': 1e-3,  # coefficient for L2 penalty
+            'max_iterations': 50,  # stop earlier
+
+            # include transitions that are possible, but not observed
+            'feature.possible_transitions': True
+        })
+
+        trainer.train('crf_model.crfsuite')
+    else:
+        # Devel
+        output_file_name = "task9.1_out_2.txt"
+        input_directory = '../data/Devel/'
+
+        entities_dict = get_external_resources()
+
+        output_file = open('../output/' + output_file_name, 'w+')
+        # print_truth_patterns(input_directory)
+        for filename in os.listdir(input_directory):
+            root = parse_xml(input_directory + filename)
+            print(" - File:", filename)
+            for child in root:
+                sid, text = get_sentence_info(child)
+                token_list = chem_tokenize(text)
+                features = extract_features(token_list, entities_dict, with_resources=with_resources)
+
+                tagger = pycrfsuite.Tagger()
+                tagger.open('crf_model.crfsuite')
+                bio_tags = tagger.tag(features)
+
+                entities = extract_entities_from_bio(token_list, bio_tags)
+                output_entities(sid, entities, output_file)
+
+        # Close the file
+        output_file.close()
+        print(evaluate(input_directory, output_file_name))

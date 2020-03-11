@@ -59,19 +59,28 @@ def get_external_resources():
     # Strips the newline character
     for line in Lines:
         value = line.split("|")
-        resources[value[0]] = value[1][:-1]
+        resources[value[0].lower()] = value[1][:-1]
 
+    hsdb_resources = set()
     file = open('../resources/HSDB.txt', 'r', encoding="utf8")
     Lines = file.readlines()
 
-    # Strips the newline character
     for line in Lines:
-        value = line
-        resources[value] = ""
-    return resources
+        value = line[:-1]
+        hsdb_resources.add(value.lower())
+
+    drug_n_resources = set()
+    file = open('../resources/drug_n.csv', 'r', encoding="utf8")
+    Lines = file.readlines()
+
+    for line in Lines:
+        value = line[:-1]
+        drug_n_resources.add(value.lower())
+
+    return resources, hsdb_resources, drug_n_resources
 
 
-def extract_features(token_list, entities_dict, with_resources=False):
+def extract_features(token_list, entities_dict, drug_n_set, hsdb_set, with_resources=False):
     entities = []
     previous_token_offset = (0, 0)
     stop_words = set(stopwords.words('english'))
@@ -80,9 +89,28 @@ def extract_features(token_list, entities_dict, with_resources=False):
     for i, token in enumerate(token_list):
         features = []
         if entities_dict and with_resources:
-            features.append("in_entities_dict=" + str(token[0] in entities_dict or token[0].lower() in entities_dict))
+            if token[0] in entities_dict:
+                features.append("in_entities_dict=" + entities_dict[token[0]])
+            elif token[0].lower() in entities_dict:
+                features.append("in_entities_dict=" + entities_dict[token[0].lower()])
+            else:
+                features.append("in_entities_dict=False")
         else:
             features.append("in_entities_dict=False")
+
+        if with_resources and token[0] in drug_n_set:
+            features.append("is_drug_n=True")
+        elif with_resources and token[0].lower() in drug_n_set:
+            features.append("is_drug_n=True")
+        else:
+            features.append("is_drug_n=False")
+
+        if with_resources and token[0] in hsdb_set:
+            features.append("in_hsdb_set=True")
+        elif with_resources and token[0].lower() in hsdb_set:
+            features.append("in_hsdb_set=True")
+        else:
+            features.append("in_hsdb_set=False")
 
         features.append("is_stopword=" + str(token[0].lower() in stop_words and with_resources))
 
@@ -126,33 +154,31 @@ def extract_features(token_list, entities_dict, with_resources=False):
 
         if len(token[0]) >= 4:
             features.append("suff4=" + token[0][-4:])
-        else:
-            features.append("suff4=" + token[0])
-
-        if len(token[0]) >= 4:
             features.append("pref4=" + token[0][:4])
         else:
+            features.append("suff4=" + token[0])
             features.append("pref4=" + token[0])
 
         if len(token[0]) >= 3:
             features.append("suff3=" + token[0][-3:])
-        else:
-            features.append("suff3=" + token[0])
-
-        if len(token[0]) >= 3:
             features.append("pref3=" + token[0][:3])
         else:
+            features.append("suff3=" + token[0])
             features.append("pref3=" + token[0])
 
         if len(token[0]) >= 2:
             features.append("suff2=" + token[0][-2:])
-        else:
-            features.append("suff2=" + token[0])
-
-        if len(token[0]) >= 2:
             features.append("pref2=" + token[0][:2])
         else:
+            features.append("suff2=" + token[0])
             features.append("pref2=" + token[0])
+        #
+        # if len(token[0]) >= 1:
+        #     features.append("suff1=" + token[0][-1:])
+        #     features.append("pref1=" + token[0][:1])
+        # else:
+        #     features.append("suff1=" + token[0])
+        #     features.append("pref1=" + token[0])
 
         features.append("has_poc=" + str("POC" in token[0]))
 
@@ -426,14 +452,14 @@ def extract_entities_from_bio(token_list, bio_tags):
 
 
 if __name__ == '__main__':
-    task = "test"
+    task = "train_crf"  # get_features, train_crf, test
     with_resources = True
 
     if task == "get_features":
         output_file_name = "train.txt"
         input_directory = '../data/Train/'
 
-        entities_dict = get_external_resources()
+        entities_dict, drug_n_set, hsdb_set = get_external_resources()
 
         output_file = open('../output/' + output_file_name, 'w+')
         # print_truth_patterns(input_directory)
@@ -443,7 +469,8 @@ if __name__ == '__main__':
             for child in root:
                 sid, text = get_sentence_info(child)
                 token_list = chem_tokenize(text)
-                features = extract_features(token_list, entities_dict, with_resources=with_resources)
+                features = extract_features(token_list, entities_dict, drug_n_set, hsdb_set,
+                                            with_resources=with_resources)
                 truth_entities = get_truth_entities(child)
                 gold_entities = get_gold_entities(token_list, truth_entities)
                 output_features(sid, token_list, gold_entities, features, output_file)
@@ -473,7 +500,7 @@ if __name__ == '__main__':
         output_file_name = "task9.1_out_2.txt"
         input_directory = '../data/Devel/'
 
-        entities_dict = get_external_resources()
+        entities_dict, drug_n_set, hsdb_set = get_external_resources()
 
         output_file = open('../output/' + output_file_name, 'w+')
         # print_truth_patterns(input_directory)
@@ -483,7 +510,8 @@ if __name__ == '__main__':
             for child in root:
                 sid, text = get_sentence_info(child)
                 token_list = chem_tokenize(text)
-                features = extract_features(token_list, entities_dict, with_resources=with_resources)
+                features = extract_features(token_list, entities_dict, drug_n_set, hsdb_set,
+                                            with_resources=with_resources)
 
                 tagger = pycrfsuite.Tagger()
                 tagger.open('crf_model.crfsuite')

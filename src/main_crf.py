@@ -112,6 +112,19 @@ def extract_features(token_list, entities_dict, drug_n_set, hsdb_set, with_resou
         else:
             features.append("in_hsdb_set=False")
 
+        lower_letters = sum(1 for c in token[0] if c.isupper())
+        upper_letters = sum(1 for c in token[0] if c.isupper())
+        num_digits = sum(1 for c in token[0] if c.isdigit())
+        num_punctuation = sum(1 for c in token[0] if c in string.punctuation)
+        num_roman = len(re.findall("[IVXDLCM]+", token[0]))
+
+        word_shape = lower_letters + upper_letters + num_digits + num_punctuation + num_roman
+        features.append("word_shape=" + str(word_shape))
+
+        #features.append("starts_with_uppercase=" + str(token[0][0].isupper()))
+        features.append("starts_with_digit=" + str(token[0][0].isdigit()))
+        #features.append("more_than_two_uppercase=" + str(upper_letters > 2))
+
         features.append("is_stopword=" + str(token[0].lower() in stop_words and with_resources))
 
         stopword_set = {'of', 'the', 'and', 'in', 'with', 'to', 'be', 'or', 'is', 'not', 'by', 'for',
